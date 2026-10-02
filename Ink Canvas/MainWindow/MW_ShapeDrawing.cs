@@ -742,6 +742,13 @@ namespace Ink_Canvas
             // 停顿检测逻辑
             if (Settings.Canvas.StopTimingStraighten && !_stopTimingDisable)
             {
+                if (dec.Count > 1)
+                {
+                    ResetStopTimingStraightenPreview();
+                    _stopTimingDisable = true;
+                    return;
+                }
+
                 _stopTimingPoints.Add(endP);
                 
                 double distance = Math.Sqrt(
@@ -753,7 +760,8 @@ namespace Ink_Canvas
                     _stopTimingPoint = endP;
                     _stopTiming = DateTime.Now;
                 }
-                else if ((DateTime.Now - _stopTiming).TotalMilliseconds >= Settings.Canvas.StopTimingThresholdMs)
+                else if (!_stopTimingTriggered &&
+                         (DateTime.Now - _stopTiming).TotalMilliseconds >= Settings.Canvas.StopTimingThresholdMs)
                 {
                     // 停顿时间达到阈值，触发拉直
                     if (_stopTimingPoints.Count >= 2)
@@ -769,6 +777,10 @@ namespace Ink_Canvas
                         if (lineLength >= Settings.Canvas.AutoStraightenLineThreshold)
                         {
                             _stopTimingTriggered = true;
+                            if (CanPreviewStopTimingStraighten())
+                            {
+                                ShowStopTimingStraightenPreview(startPoint, endPoint);
+                            }
                         }
                     }
                 }
@@ -1720,6 +1732,7 @@ namespace Ink_Canvas
                 }
                 if (Settings.Canvas.StopTimingStraighten)
                 {
+                    ResetStopTimingStraightenPreview();
                     _stopTimingPoint = e.GetPosition(inkCanvas);
                     _stopTiming = DateTime.Now;
                     _stopTimingDisable = false;

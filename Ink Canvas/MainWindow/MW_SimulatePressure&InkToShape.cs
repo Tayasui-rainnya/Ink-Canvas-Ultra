@@ -25,6 +25,9 @@ namespace Ink_Canvas
         bool _stopTimingDisable = false;
         List<Point> _stopTimingPoints = new List<Point>();
         bool _stopTimingTriggered = false;
+        Stroke _stopTimingPreviewStroke;
+        Point _stopTimingLineStartPoint;
+        Point _stopTimingLineEndPoint;
         const double RECTANGLE_ENDPOINT_THRESHOLD = 30.0;
         const double RECTANGLE_ANGLE_THRESHOLD = 15.0;
 
@@ -56,6 +59,56 @@ namespace Ink_Canvas
             }
         }
 
+        /// <summary>
+        /// Determines whether the current ink session can display the pause-to-straighten preview.
+        /// The preview is deliberately limited to a single normal ink stroke: shape drawing, erasing,
+        /// and multi-touch input have their own stroke lifecycles and must not be replaced on release.
+        /// </summary>
+        private bool CanPreviewStopTimingStraighten()
+        {
+            return Settings.Canvas.AutoStraightenLine &&
+                   Settings.Canvas.StopTimingStraighten &&
+                   drawingShapeMode == 0 &&
+                   !forceEraser &&
+                   inkCanvas.EditingMode == InkCanvasEditingMode.Ink &&
+                   dec.Count <= 1;
+        }
+
+        /// <summary>
+        /// Shows the forced straight-line result before the input stroke is collected.  Its endpoints
+        /// are captured at the pause threshold so a later release over a toolbar or screen edge cannot
+        /// change the line that is committed.
+        /// </summary>
+        private void ShowStopTimingStraightenPreview(Point startPoint, Point endPoint)
+        {
+            if (!CanPreviewStopTimingStraighten()) return;
+
+            _stopTimingLineStartPoint = startPoint;
+            _stopTimingLineEndPoint = endPoint;
+            _stopTimingPreviewStroke = new Stroke(CreateStraightLine(startPoint, endPoint))
+            {
+                DrawingAttributes = inkCanvas.DefaultDrawingAttributes.Clone()
+            };
+            inkCanvas.Strokes.Add(_stopTimingPreviewStroke);
+        }
+
+        /// <summary>
+        /// Removes a pending pause-to-straighten preview and clears its captured endpoints.  This is
+        /// used when the gesture becomes ineligible (for example, when another finger touches down).
+        /// </summary>
+        private void ResetStopTimingStraightenPreview()
+        {
+            if (_stopTimingPreviewStroke != null)
+            {
+                inkCanvas.Strokes.Remove(_stopTimingPreviewStroke);
+                _stopTimingPreviewStroke = null;
+            }
+
+            _stopTimingTriggered = false;
+            _stopTimingLineStartPoint = new Point();
+            _stopTimingLineEndPoint = new Point();
+        }
+
         //此函数中的所有代码版权所有 WXRIW，在其他项目中使用前必须提前联系（wxriw@outlook.com），谢谢！
         private void inkCanvas_StrokeCollected(object sender, InkCanvasStrokeCollectedEventArgs e)
         {
@@ -66,14 +119,32 @@ namespace Ink_Canvas
                 // 停顿拉直处理
                 if (Settings.Canvas.StopTimingStraighten && _stopTimingTriggered)
                 {
+                    // Adding the visual preview must never be mistaken for completion of the input stroke.
+                    if (ReferenceEquals(e.Stroke, _stopTimingPreviewStroke)) return;
+
                     var currentStroke = e.Stroke;
-                    if (IsPotentialStraightLine(currentStroke))
+                    if (_stopTimingPreviewStroke != null)
+                    {
+                        Point startPoint = _stopTimingLineStartPoint;
+                        Point endPoint = _stopTimingLineEndPoint;
+                        ResetStopTimingStraightenPreview();
+                        var straightStroke = new Stroke(CreateStraightLine(startPoint, endPoint))
+                        {
+                            DrawingAttributes = inkCanvas.DefaultDrawingAttributes.Clone()
+                        };
+                        SetNewBackupOfStroke();
+                        _currentCommitType = CommitReason.ShapeRecognition;
+                        inkCanvas.Strokes.Remove(currentStroke);
+                        inkCanvas.Strokes.Add(straightStroke);
+                        _currentCommitType = CommitReason.UserInput;
+                        newStrokes.Add(straightStroke);
+                        if (newStrokes.Count > 4) newStrokes.RemoveAt(0);
+                    }
+                    else if (IsPotentialStraightLine(currentStroke) && ShouldStraightenLine(currentStroke))
                     {
                         Point startPoint = currentStroke.StylusPoints[0].ToPoint();
                         Point endPoint = currentStroke.StylusPoints[currentStroke.StylusPoints.Count - 1].ToPoint();
-
-                        bool shouldStraighten = ShouldStraightenLine(currentStroke);
-                        if (shouldStraighten && Settings.Canvas.LineEndpointSnapping && (Settings.InkToShape.IsInkToShapeRectangle || Settings.InkToShape.IsInkToShapeTriangle))
+                        if (Settings.Canvas.LineEndpointSnapping && (Settings.InkToShape.IsInkToShapeRectangle || Settings.InkToShape.IsInkToShapeTriangle))
                         {
                             var snapped = GetSnappedEndpoints(startPoint, endPoint);
                             if (snapped != null)
@@ -83,27 +154,22 @@ namespace Ink_Canvas
                             }
                         }
 
-                        if (shouldStraighten)
+                        var straightStroke = new Stroke(CreateStraightLine(startPoint, endPoint))
                         {
-                            StylusPointCollection straightLinePoints = CreateStraightLine(startPoint, endPoint);
-                            var straightStroke = new Stroke(straightLinePoints)
-                            {
-                                DrawingAttributes = inkCanvas.DefaultDrawingAttributes.Clone()
-                            };
-                            SetNewBackupOfStroke();
-                            _currentCommitType = CommitReason.ShapeRecognition;
-                            inkCanvas.Strokes.Remove(currentStroke);
-                            inkCanvas.Strokes.Add(straightStroke);
-                            _currentCommitType = CommitReason.UserInput;
-                            if (newStrokes.Contains(currentStroke))
-                            {
-                                newStrokes.Remove(currentStroke);
-                                newStrokes.Add(straightStroke);
-                            }
-                            currentStroke = straightStroke;
+                            DrawingAttributes = inkCanvas.DefaultDrawingAttributes.Clone()
+                        };
+                        SetNewBackupOfStroke();
+                        _currentCommitType = CommitReason.ShapeRecognition;
+                        inkCanvas.Strokes.Remove(currentStroke);
+                        inkCanvas.Strokes.Add(straightStroke);
+                        _currentCommitType = CommitReason.UserInput;
+                        if (newStrokes.Contains(currentStroke))
+                        {
+                            newStrokes.Remove(currentStroke);
+                            newStrokes.Add(straightStroke);
                         }
                     }
-                    
+
                     _stopTimingTriggered = false;
                     _stopTimingDisable = true;
                 }

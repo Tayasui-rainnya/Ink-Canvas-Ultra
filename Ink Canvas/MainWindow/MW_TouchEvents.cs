@@ -367,6 +367,7 @@ namespace Ink_Canvas
                 }
                 if (Settings.Canvas.StopTimingStraighten)
                 {
+                    ResetStopTimingStraightenPreview();
                     _stopTimingPoint = iniP;
                     _stopTiming = DateTime.Now;
                     _stopTimingDisable = false;
@@ -466,6 +467,7 @@ namespace Ink_Canvas
         /// </summary>
         private void ResetTouchState()
         {
+            ResetStopTimingStraightenPreview();
             dec.Clear();
             foreach (var visualCanvas in VisualCanvasList.Values.ToList())
             {
@@ -518,6 +520,7 @@ namespace Ink_Canvas
                 }
                 if (dec.Count > 1 || isSingleFingerDragMode || !Settings.Gesture.IsEnableTwoFingerGesture)
                 {
+                    ResetStopTimingStraightenPreview();
                     if (isInMultiTouchMode || !Settings.Gesture.IsEnableTwoFingerGesture) return;
                     if (inkCanvas.EditingMode != InkCanvasEditingMode.None && inkCanvas.EditingMode != InkCanvasEditingMode.Select)
                     {
