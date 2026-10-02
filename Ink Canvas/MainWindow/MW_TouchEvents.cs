@@ -365,14 +365,7 @@ namespace Ink_Canvas
                 {
                     iniP = e.GetTouchPoint(inkCanvas).Position;
                 }
-                if (Settings.Canvas.StopTimingStraighten)
-                {
-                    _stopTimingPoint = iniP;
-                    _stopTiming = DateTime.Now;
-                    _stopTimingDisable = false;
-                    _stopTimingPoints.Clear();
-                    _stopTimingPoints.Add(_stopTimingPoint);
-                }
+                BeginStopTimingStraighten(iniP);
                 if (drawingShapeMode == 9 && isFirstTouchCuboid == false)
                 {
                     MouseTouchMove(iniP);
@@ -507,17 +500,15 @@ namespace Ink_Canvas
 
                     lastTouchDownStrokeCollection = inkCanvas.Strokes.Clone();
                     
-                    if (Settings.Canvas.StopTimingStraighten)
-                    {
-                        _stopTimingPoint = touchPoint.Position;
-                        _stopTiming = DateTime.Now;
-                        _stopTimingDisable = false;
-                        _stopTimingPoints.Clear();
-                        _stopTimingPoints.Add(_stopTimingPoint);
-                    }
+                    BeginStopTimingStraighten(touchPoint.Position);
                 }
                 if (dec.Count > 1 || isSingleFingerDragMode || !Settings.Gesture.IsEnableTwoFingerGesture)
                 {
+                    if (dec.Count > 1)
+                    {
+                        _stopTimingDisable = true;
+                        ClearStopTimingPreview();
+                    }
                     if (isInMultiTouchMode || !Settings.Gesture.IsEnableTwoFingerGesture) return;
                     if (inkCanvas.EditingMode != InkCanvasEditingMode.None && inkCanvas.EditingMode != InkCanvasEditingMode.Select)
                     {
